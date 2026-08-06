@@ -1,0 +1,7 @@
+{
+    "vocab_size": 7534,
+    "embedding_dim": 64,
+    "hidden_dim": 128,
+    "num_classes": 5,
+    "padding_idx": 0
+}
