@@ -1,0 +1,301 @@
+# reviews-semantics-dl
+
+Predicts the 1-5 star rating a customer gave a Brazilian e-commerce order,
+from the free-text review comment alone (Portuguese). Built by migrating a
+research notebook (`notebooks/review-score-semantics.ipynb`) into a
+production service, for the "Do notebook para o DevOps" activity.
+
+```
+"Produto ótimo, chegou antes do prazo, super recomendo!"  ->  5
+"Produto veio quebrado e o vendedor nunca respondeu"       ->  1
+```
+
+The served model is a from-scratch bidirectional LSTM ("the baseline") - the
+one paradigm from the notebook with a trained checkpoint committed to this
+repository. It is competitive with the notebook's fine-tuned Transformer
+models (macro F1 0.419 vs. 0.44-0.46) while being far cheaper to run - see
+`GET /v1/model/info` below for the live metrics, or
+`notebooks/review-score-semantics.ipynb` for the full comparison and how
+this baseline was trained.
+
+## What's in this repository
+
+| Path | What it is |
+|---|---|
+| `notebooks/review-score-semantics.ipynb` | The original research notebook: trains and compares 7 models across 3 paradigms (BiLSTM from scratch, 3 fine-tuned Transformers, 3 frozen-encoder feature-extraction models) |
+| `src/dlkit/` | Reusable, domain-agnostic epoch-based PyTorch training toolkit + framework-agnostic model artifact/serving contracts - see [`src/dlkit/README.md`](src/dlkit/README.md) |
+| `src/reviews_semantics/` | The Olist review-score application: data prep, the BiLSTM model, the FastAPI service, the batch CLI - built on top of `dlkit` |
+| `models/bilstm-baseline/` | The committed, ready-to-serve model bundle |
+| `docker/`, `docker-compose.yml` | Container definitions for serving and (re)training |
+
+This project implements **two** of the three production cases the activity
+allows: an **online prediction API** and an **offline batch execution**
+task, both built on the exact same inference code (see "Architecture" below).
+
+## Quickstart (Docker)
+
+Requires Docker and Docker Compose. From the repository root:
+
+```bash
+docker compose up --build serve
+```
+
+This builds the lean serving image (no training dependencies - see
+"Architecture") and starts the API on `http://localhost:8000`.
+
+```bash
+curl http://localhost:8000/healthz
+# {"status":"ok"}
+
+curl -X POST http://localhost:8000/v1/predictions \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Produto excelente, chegou antes do prazo, recomendo!"}'
+# {"score":5}
+```
+
+Interactive API docs (Swagger UI): `http://localhost:8000/docs`.
+
+Stop it with `Ctrl+C`, or `docker compose down`.
+
+## The online API
+
+Base URL: `http://localhost:8000` (or wherever the container is deployed).
+All endpoints are JSON in, JSON out.
+
+### `POST /v1/predictions`
+
+Predicts the star rating for a single review.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `text` | string | yes | Raw review comment, in Portuguese. Non-empty. |
+
+```json
+{"text": "Produto excelente, chegou antes do prazo, recomendo!"}
+```
+
+**Response body** — `200 OK`
+
+| Field | Type | Notes |
+|---|---|---|
+| `score` | integer | Predicted star rating, `1`-`5` |
+
+```json
+{"score": 5}
+```
+
+`422 Unprocessable Entity` if `text` is missing or empty.
+
+### `POST /v1/predictions/batch`
+
+Same as above, for up to 256 texts in one request.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `texts` | array of string | yes | 1-256 items |
+
+```json
+{"texts": ["Produto ótimo!", "Não gostei, veio errado."]}
+```
+
+**Response body** — `200 OK`
+
+| Field | Type | Notes |
+|---|---|---|
+| `scores` | array of integer | One score per input text, same order |
+
+```json
+{"scores": [5, 2]}
+```
+
+`422 Unprocessable Entity` if `texts` is empty or has more than 256 items.
+
+### `GET /v1/model/info`
+
+Returns metadata about the currently loaded model - useful to confirm
+what's actually being served and to sanity-check its offline metrics.
+
+**Response body** — `200 OK`
+
+```json
+{
+  "flavor": "bilstm",
+  "label_schema_kind": "ordinal",
+  "classes": [1, 2, 3, 4, 5],
+  "metrics": {
+    "test_accuracy": 0.4214,
+    "test_macro_f1": 0.4191,
+    "test_mae": 0.7887,
+    "test_rmse": 1.1454,
+    "test_qwk": 0.6793
+  }
+}
+```
+
+### `GET /healthz` / `GET /readyz`
+
+Liveness and readiness probes for orchestrators (Docker healthcheck,
+Kubernetes, etc.). `/healthz` always returns `200`; `/readyz` returns `503`
+until the model has finished loading at startup.
+
+## The offline batch CLI
+
+Scores every row of a CSV file - the offline-execution case, sharing the
+exact same model-loading and inference code as the API (see "Architecture").
+
+```bash
+docker compose run --rm serve \
+  reviews-semantics predict-batch \
+  --input /app/data/test.csv \
+  --output /app/out/scored.csv \
+  --text-column review_comment_message
+```
+
+(Mount your own input/output directories via `-v` if not using
+`docker-compose.yml`'s defaults, or run it directly against a local install
+- see "Local development" below.)
+
+**What happens**: the input CSV is streamed in chunks of 256 rows (so
+arbitrarily large files never need to fit in memory at once); each row's
+`--text-column` is scored using the same BiLSTM baseline as the API; the
+output CSV is the input CSV plus one new column, `predicted_score`
+(configurable via `--score-column`).
+
+**Flags**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--input` | *(required)* | Path to the input CSV |
+| `--output` | *(required)* | Path to write the scored CSV |
+| `--text-column` | `review_comment_message` | Column containing the review text |
+
+Exits non-zero with a clear error if `--text-column` doesn't exist in the
+input file.
+
+## Architecture
+
+```
+                      ┌─────────────────────┐
+                      │  dlkit (generic)     │
+                      │  - NNTrainer (epochs)│
+                      │  - ArtifactBundle     │
+                      │  - Predictor protocol │
+                      │  - Metric/Evaluator   │
+                      └──────────┬───────────┘
+                                 │ depends on (never the reverse)
+                      ┌──────────▼───────────┐
+                      │ reviews_semantics     │
+                      │  - SentimentLSTM       │
+                      │  - BiLSTMPredictor     │
+                      └───┬───────────────┬───┘
+                          │               │
+                 ┌────────▼───┐   ┌───────▼────────┐
+                 │ FastAPI app │   │ batch CLI       │
+                 │ (online)    │   │ (offline)       │
+                 └─────────────┘   └────────────────┘
+                 both call reviews_semantics.inference.load_default_predictor()
+```
+
+The two packages are separately versioned and independently installable
+(each has its own `pyproject.toml`); `reviews_semantics` depends on `dlkit`,
+never the other way around. `dlkit` is intentionally reusable beyond this
+project - see [`src/dlkit/README.md`](src/dlkit/README.md) for what it is
+(and isn't) built for.
+
+**Training and serving share one artifact format.** `dlkit.artifacts.ArtifactBundle`
+is the single contract every trainer's `save()` writes and every predictor's
+`load()` reads (a `bundle.json` manifest + the model's files). This is what
+lets the API and the batch CLI both resolve "which model, from where" through
+one `ModelRegistry` (`reviews_semantics/registry.py`), switchable via
+environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MODEL_SOURCE` | `local` | `local` (a path baked into the image) or `mlflow` (download from an MLflow run - for development) |
+| `MODEL_PATH` | `/app/model` | Bundle directory, when `MODEL_SOURCE=local` |
+| `MLFLOW_RUN_ID` | *(none)* | MLflow run to download from, when `MODEL_SOURCE=mlflow` |
+| `MLFLOW_TRACKING_URI` | *(none)* | Passed to `mlflow.set_tracking_uri` |
+| `DEVICE` | `cpu` | `cpu` or `cuda` |
+
+Two other paradigms from the notebook (Transformer fine-tuning, frozen-
+encoder feature extraction) have minimal, working implementations under
+`src/reviews_semantics/src/reviews_semantics/paradigms/` proving `dlkit`'s
+contracts aren't BiLSTM-specific. They are **not** wired into the API/CLI:
+no trained artifact for them is committed to this repository.
+
+## Local development (no Docker)
+
+Requires Python 3.12+.
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
+pip install -e src/dlkit
+pip install -e "src/reviews_semantics[train]"   # omit [train] for a lean, serving-only environment
+pip install -r requirements-dev.txt              # pytest, ruff, mypy, httpx
+```
+
+Run the API:
+
+```bash
+MODEL_SOURCE=local MODEL_PATH=models/bilstm-baseline reviews-semantics serve
+```
+
+Run the batch CLI:
+
+```bash
+MODEL_SOURCE=local MODEL_PATH=models/bilstm-baseline reviews-semantics predict-batch \
+  --input data/test.csv --output scored.csv
+```
+
+## Reproducing training
+
+The baseline model served in production is a repackaged copy of the
+notebook's original checkpoint, not a fresh retrain - this preserves exact
+parity with the metrics already reported by the notebook, instead of
+depending on a new, non-deterministic training run. The full training
+pipeline is nonetheless present and runnable, either in the training
+container or locally, for reproducibility and future retraining.
+
+**Docker** (heavier image: torch, MLflow, Optuna, matplotlib):
+
+```bash
+docker compose --profile train run --rm train
+```
+
+Mounts `./data` (read-only), `./mlflow`, and `./models` as volumes; writes a
+freshly trained bundle to `models/bilstm-baseline/` and logs the run to the
+local MLflow store. Browse it with:
+
+```bash
+docker compose --profile mlflow up mlflow-ui
+# http://localhost:5000
+```
+
+**Locally**, with the `[train]` extra installed (see above):
+
+```bash
+reviews-semantics train-baseline --data-dir data --output-dir models/bilstm-baseline --epochs 20
+```
+
+## Testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest        # runs both packages' test suites (dlkit + reviews_semantics)
+ruff check src
+```
+
+The `reviews_semantics` suite includes a regression test
+(`src/reviews_semantics/tests/regression/test_predictions_parity.py`) that
+reproduces the notebook's saved test-set predictions row-for-row through the
+migrated `BiLSTMPredictor`, guarding against silent behavior drift from the
+migration.
+
+## License
+
+See [`LICENSE`](LICENSE).

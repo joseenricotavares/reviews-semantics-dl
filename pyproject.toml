@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "typer.Argument", "typer.Option"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+explicit_package_bases = true
+mypy_path = ["src/dlkit/src", "src/reviews_semantics/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/dlkit/tests", "src/reviews_semantics/tests"]

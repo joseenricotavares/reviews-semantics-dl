@@ -1,0 +1,31 @@
+name: Auto PR to main
+
+on:
+  push:
+    branches:
+      - "feature/**"
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open a PR to main if one isn't already open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing=$(gh pr list --base main --head "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for ${GITHUB_REF_NAME} -> main; nothing to do."
+            exit 0
+          fi
+          gh pr create \
+            --base main \
+            --head "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --body "Auto-opened by .github/workflows/auto-pr.yml on push to \`${GITHUB_REF_NAME}\`."
