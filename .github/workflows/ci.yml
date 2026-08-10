@@ -96,3 +96,39 @@ jobs:
 
       - name: Build train image
         run: docker build -f docker/train.Dockerfile -t reviews-semantics-train:ci .
+
+  tag-release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [test, docker]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag each package at its current version, if not already tagged
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          tag_package () {
+            local dir="$1"
+            local name version tag
+            name=$(grep -m1 '^name = ' "$dir/pyproject.toml" | sed -E 's/name = "(.*)"/\1/')
+            version=$(grep -m1 '^version = ' "$dir/pyproject.toml" | sed -E 's/version = "(.*)"/\1/')
+            tag="${name}-v${version}"
+
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "OK: $tag already exists, skipping."
+            else
+              git tag -a "$tag" -m "$tag"
+              git push origin "$tag"
+              echo "Created and pushed tag $tag"
+            fi
+          }
+
+          tag_package "src/dlkit"
+          tag_package "src/reviews_semantics"
