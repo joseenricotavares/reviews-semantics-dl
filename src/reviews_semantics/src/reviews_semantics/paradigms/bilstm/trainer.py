@@ -7,8 +7,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from dlkit.artifacts import ArtifactBundle, BundleFile
-from dlkit.optim import OPTIMIZERS
-from dlkit.training import NNTrainer, TrainerCallback
+from dlkit.training import OPTIMIZERS, NNTrainer, TrainerCallback
 from torch.utils.data import DataLoader
 
 from reviews_semantics.data.vocab import TextPreprocessor

@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reviews-semantics"
-version = "0.1.0"
+version = "0.2.0"
 description = "Olist review-score classification service, built on dlkit."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
-    "dlkit>=0.1.0,<0.2",
+    "dlkit>=0.2.0,<0.3",
     "torch>=2.8,<3",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 train = [
-    "dlkit[all]>=0.1.0,<0.2",
+    "dlkit[all]>=0.2.0,<0.3",
     "transformers>=5,<6",
     "optuna>=4",
     "mlflow>=2.11,<3",

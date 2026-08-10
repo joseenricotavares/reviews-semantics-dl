@@ -4,6 +4,13 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from sklearn.metrics import f1_score
+
+
+def per_class_f1(y_true: Sequence[int], y_pred: Sequence[int], classes: Sequence[int]) -> dict[int, float]:
+    scores = f1_score(y_true, y_pred, average=None, labels=list(classes), zero_division=0)
+    return dict(zip(classes, (float(s) for s in scores), strict=True))
+
 
 @dataclass(slots=True)
 class SemanticDistanceReport:

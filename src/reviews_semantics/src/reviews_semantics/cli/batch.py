@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dlkit.inference import Predictor
 
-from reviews_semantics.inference import load_default_predictor
+from reviews_semantics.registry import load_default_predictor
 
 DEFAULT_CHUNK_SIZE = 256
 
@@ -17,7 +17,7 @@ def predict_csv(
     text_column: str = "review_comment_message",
     score_column: str = "predicted_score",
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    predictor: Predictor | None = None,
+    predictor: Predictor[str] | None = None,
 ) -> int:
     """Reads `input_path`, predicts a star rating for each row's `text_column`,
     and writes `output_path` with an added `score_column`. Returns the number
@@ -53,7 +53,7 @@ def predict_csv(
 
 def _flush_chunk(
     chunk: list[dict[str, str]],
-    predictor: Predictor,
+    predictor: Predictor[str],
     text_column: str,
     score_column: str,
     writer: csv.DictWriter,

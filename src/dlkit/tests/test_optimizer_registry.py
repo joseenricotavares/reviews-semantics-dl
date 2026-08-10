@@ -1,5 +1,5 @@
 import torch
-from dlkit.optim.registry import OPTIMIZERS, OptimizerType
+from dlkit.training.optim import OPTIMIZERS, OptimizerType
 
 
 def _params():

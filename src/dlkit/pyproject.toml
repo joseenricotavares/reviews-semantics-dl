@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dlkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reusable epoch-based PyTorch training toolkit plus framework-agnostic model artifact/serving contracts."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,14 +15,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-callbacks-mlflow = ["mlflow>=2.11,<3"]
+mlflow = ["mlflow>=2.11,<3"]
 callbacks-rich = ["rich>=13"]
 callbacks-optuna = ["optuna>=4"]
 plotting = ["matplotlib>=3.8"]
 # Self-referential extra: pyproject.toml is declarative data, not a template
 # language, so this list of extra names has to be kept in sync by hand
 # whenever a new extra is added above (see _ignore/duvidas/03-extras-do-pip.md).
-all = ["dlkit[callbacks-mlflow,callbacks-rich,callbacks-optuna,plotting]"]
+all = ["dlkit[mlflow,callbacks-rich,callbacks-optuna,plotting]"]
 dev = ["pytest>=8", "pytest-cov>=5"]
 
 [tool.setuptools.packages.find]

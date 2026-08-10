@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from dlkit.evaluation.metric import Metric
+from dlkit.evaluation.metrics.base import Metric
 
 
 @dataclass(slots=True)

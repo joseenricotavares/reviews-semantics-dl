@@ -6,7 +6,7 @@ from enum import StrEnum
 import torch.optim as optim
 
 
-class OptimizerType(StrEnum): #TODO: add new optimizers as needed
+class OptimizerType(StrEnum):  # TODO: add new optimizers as needed
     ADAM = "adam"
     ADAMW = "adamw"
     SGD = "sgd"
