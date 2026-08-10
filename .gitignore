@@ -9,14 +9,8 @@ data/*
 notebooks/mlruns
 notebooks/hf
 
+
 mlflow/*
-mlflow/**/*
-!mlflow/
-!mlflow/artifacts/
-!mlflow/artifacts/5e2810b40c6f41bb8482ebdd142395a1/
-!mlflow/artifacts/5e2810b40c6f41bb8482ebdd142395a1/artifacts/
-!mlflow/artifacts/5e2810b40c6f41bb8482ebdd142395a1/artifacts/model/
-!mlflow/artifacts/5e2810b40c6f41bb8482ebdd142395a1/artifacts/model/**
 
 
 # Byte-compiled / optimized / DLL files

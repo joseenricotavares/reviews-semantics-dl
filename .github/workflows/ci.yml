@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a version bump for every package whose source changed
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          FAILED=0
+
+          check_package () {
+            local name="$1" dir="$2"
+            local changed
+            changed=$(git diff --name-only "$BASE"...HEAD -- "$dir/src" "$dir/pyproject.toml" | wc -l)
+            if [ "$changed" -eq 0 ]; then
+              echo "OK: $name - no source changes in this PR, no version bump required."
+              return
+            fi
+            local version_line_changed
+            version_line_changed=$(git diff "$BASE"...HEAD -- "$dir/pyproject.toml" | grep -c '^[+-]version = ' || true)
+            if [ "$version_line_changed" -eq 0 ]; then
+              echo "::error::$name changed under $dir/src (or $dir/pyproject.toml) but the 'version' field in $dir/pyproject.toml was not bumped. Bump it (patch/minor/major as appropriate) before merging."
+              FAILED=1
+            else
+              echo "OK: $name - source changed and version was bumped."
+            fi
+          }
+
+          check_package "dlkit" "src/dlkit"
+          check_package "reviews_semantics" "src/reviews_semantics"
+
+          exit $FAILED
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packages
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -e src/dlkit
+          pip install -e "src/reviews_semantics[train]"
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: |
+          source .venv/bin/activate
+          ruff check src
+
+      - name: Test
+        run: |
+          source .venv/bin/activate
+          pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build serve image
+        run: docker build -f docker/serve.Dockerfile -t reviews-semantics-serve:ci .
+
+      - name: Smoke test serve image
+        run: |
+          docker run -d --name serve-smoke -p 8000:8000 reviews-semantics-serve:ci
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8000/healthz && break
+            sleep 2
+          done
+          curl -sf http://localhost:8000/readyz
+          curl -sf -X POST http://localhost:8000/v1/predictions \
+            -H "Content-Type: application/json" \
+            -d '{"text": "produto otimo, chegou rapido"}'
+          docker stop serve-smoke
+
+      - name: Build train image
+        run: docker build -f docker/train.Dockerfile -t reviews-semantics-train:ci .

@@ -1,0 +1,26 @@
+{
+  "bundle_version": "1",
+  "flavor": "bilstm",
+  "label_schema": {
+    "kind": "ordinal",
+    "classes": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "artifacts": {
+    "weights": "state_dict.pt",
+    "model_config": "model.json",
+    "preprocessor": "preprocessor.json"
+  },
+  "metrics": {
+    "test_accuracy": 0.4213797389683033,
+    "test_macro_f1": 0.4191278713992994,
+    "test_mae": 0.7886886264760721,
+    "test_rmse": 1.1454235146738003,
+    "test_qwk": 0.6793318325512367
+  }
+}

@@ -1,0 +1,14 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.egg-info
+notebooks/hf
+notebooks/mlruns
+mlflow/mlflow.db
+mlflow/artifacts
+data/olist_*.csv
+data/product_category_name_translation.csv

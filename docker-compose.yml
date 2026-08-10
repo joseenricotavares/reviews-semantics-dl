@@ -1,0 +1,44 @@
+services:
+  serve:
+    build:
+      context: .
+      dockerfile: docker/serve.Dockerfile
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Not started by `docker compose up` - run explicitly with:
+  #   docker compose --profile train run --rm train
+  train:
+    build:
+      context: .
+      dockerfile: docker/train.Dockerfile
+    profiles: ["train"]
+    volumes:
+      - ./data:/app/data:ro
+      - ./mlflow:/app/mlflow
+      - ./models:/app/models
+    environment:
+      MLFLOW_TRACKING_URI: sqlite:////app/mlflow/mlflow.db
+
+  # Optional: browse experiment runs/artifacts logged by `train`.
+  #   docker compose --profile mlflow up mlflow-ui
+  mlflow-ui:
+    build:
+      context: .
+      dockerfile: docker/train.Dockerfile
+    profiles: ["train", "mlflow"]
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////app/mlflow/mlflow.db
+      --default-artifact-root /app/mlflow/artifacts
+      --host 0.0.0.0
+    volumes:
+      - ./mlflow:/app/mlflow
+    ports:
+      - "5000:5000"
