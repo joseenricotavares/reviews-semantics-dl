@@ -16,7 +16,7 @@ jobs:
 
       - name: Open a PR to main if one isn't already open
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN }}
         run: |
           set -euo pipefail
           existing=$(gh pr list --base main --head "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number // empty')
