@@ -18,7 +18,7 @@ router = APIRouter(tags=["predictions"])
 
 @router.post("/predictions", response_model=PredictionResponse)
 def predict_one(
-    request: PredictionRequest, predictor: Predictor = Depends(get_predictor)
+    request: PredictionRequest, predictor: Predictor[str] = Depends(get_predictor)
 ) -> PredictionResponse:
     (score,) = predictor.predict([request.text])
     return PredictionResponse(score=score)
@@ -26,7 +26,7 @@ def predict_one(
 
 @router.post("/predictions/batch", response_model=BatchPredictionResponse)
 def predict_batch(
-    request: BatchPredictionRequest, predictor: Predictor = Depends(get_predictor)
+    request: BatchPredictionRequest, predictor: Predictor[str] = Depends(get_predictor)
 ) -> BatchPredictionResponse:
     return BatchPredictionResponse(scores=predictor.predict(request.texts))
 

@@ -4,10 +4,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from dlkit.evaluation import AccuracyMetric, EvaluationResult, Evaluator, F1Metric
-from sklearn.metrics import f1_score
 
 from reviews_semantics.evaluation.ordinal_metrics import MAEMetric, QuadraticWeightedKappaMetric, RMSEMetric
-from reviews_semantics.evaluation.semantic_distance import SemanticDistanceReport, semantic_distance_report
+from reviews_semantics.evaluation.reports import (
+    SemanticDistanceReport,
+    per_class_f1,
+    semantic_distance_report,
+)
 from reviews_semantics.labels import STAR_SCHEMA
 
 _EVALUATOR = Evaluator(
@@ -19,11 +22,6 @@ _EVALUATOR = Evaluator(
         QuadraticWeightedKappaMetric(),
     ]
 )
-
-
-def per_class_f1(y_true: Sequence[int], y_pred: Sequence[int], classes: Sequence[int]) -> dict[int, float]:
-    scores = f1_score(y_true, y_pred, average=None, labels=list(classes), zero_division=0)
-    return dict(zip(classes, (float(s) for s in scores), strict=True))
 
 
 @dataclass(slots=True)

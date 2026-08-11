@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from dlkit.evaluation.metric import Metric
+from dlkit.evaluation.metrics.base import Metric
 
 
 @dataclass(frozen=True, slots=True)

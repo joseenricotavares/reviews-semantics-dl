@@ -11,17 +11,25 @@ an API" plumbing on every new project.
 
 ## What it is built for
 
-- **`dlkit.training` / `dlkit.optim` / `dlkit.callbacks`** — PyTorch. An
-  epoch-based `NNTrainer` (train/validate/early-stop/checkpoint loop) that any
-  `torch.nn.Module`-based model can plug into by implementing three methods.
-- **`dlkit.evaluation`** — small, composable evaluation primitives
-  (`Metric` + `Evaluator`) built on scikit-learn, plus a couple of metrics
-  that are generic to any classification problem (accuracy, F1).
+- **`dlkit.training`** (including `dlkit.training.optim`, `dlkit.training.callbacks`)
+  — PyTorch. An epoch-based `NNTrainer` (train/validate/early-stop/checkpoint
+  loop) that any `torch.nn.Module`-based model can plug into by implementing
+  three methods.
+- **`dlkit.evaluation`** — small, composable, side-effect-free evaluation
+  primitives built on scikit-learn: a `Metric` protocol and a catalog of
+  metrics generic to any classification problem (accuracy, F1), under
+  `dlkit.evaluation.metrics`, plus the `Evaluator` that composes them.
 - **`dlkit.artifacts` / `dlkit.inference`** — framework-agnostic. A model
   artifact bundle format and a `Predictor` protocol that work equally well
   for a PyTorch model or a plain scikit-learn pipeline, as long as whatever
   produced it can write the bundle and whatever serves it can implement
   `predict()`.
+- **`dlkit.mlflow_logging`** — one function, `log_evaluation`, that logs an
+  `EvaluationResult` to MLflow. It lives at the package root, not inside
+  `dlkit.evaluation`, precisely so `dlkit.evaluation` can stay 100% pure:
+  compose a list of metrics, run them against `(y_true, y_pred)`, get a
+  result back - no I/O, no side effects, no coupling to any tracking or
+  plotting library.
 
 ## Explicit non-goals
 
@@ -37,6 +45,11 @@ These are deliberate scope boundaries, not oversights:
 - No fixed evaluation taxonomy. `dlkit.evaluation` gives you `Metric` + `Evaluator`
   and a couple of ready-made generic metrics; anything domain-specific is expected to
   be implemented by the consuming project as its own `Metric`.
+- No tooling for non-text modalities. `dlkit.inference.Predictor[InputT]` is
+  generic over its input type. An `ImagePredictor` could satisfy
+  `Predictor[PIL.Image.Image]` without touching the protocol, but `dlkit`
+  ships zero concrete tooling for anything but the contract itself (no image
+  transforms, no tokenizers).
 
 ## What already works without any dlkit change
 
@@ -48,31 +61,70 @@ fixed set of metrics — the `Monitor`/`Metric` abstractions accept any
 ## Installing
 
 ```bash
-pip install -e src/dlkit                                   # base: NNTrainer, artifacts, inference, generic evaluation
-pip install -e "src/dlkit[callbacks-mlflow,plotting]"       # add extras as needed
+pip install -e src/dlkit                            # base: NNTrainer, artifacts, inference, generic evaluation
+pip install -e "src/dlkit[mlflow,plotting]"          # add extras as needed
+pip install -e "src/dlkit[all]"                      # every extra at once
 ```
 
-Extras: `callbacks-mlflow`, `callbacks-rich`, `callbacks-optuna`, `plotting`.
-Each isolates its heavy/optional dependency (`mlflow`, `rich`, `optuna`,
-`matplotlib`) so a lean serving environment never has to install them.
+Extras: `mlflow`, `callbacks-rich`, `callbacks-optuna`, `plotting`. Each
+isolates its heavy/optional dependency (`mlflow`, `rich`, `optuna`,
+`matplotlib`) so a lean serving environment never has to install them
 
 ## Minimal example
 
+The full cycle - train, get logging/progress/plotting, save, and
+serve - is where dlkit's value shows up:
+
 ```python
-from dlkit.training import NNTrainer, TrainerConfig, Monitor
+from dataclasses import dataclass
+import torch
+import torch.nn as nn
+
+from dlkit.training import NNTrainer, Monitor, OPTIMIZERS, OptimizerType
+from dlkit.training.callbacks import build as build_callbacks
 from dlkit.evaluation import AccuracyMetric
+from dlkit.artifacts import ArtifactBundle, BundleFile, LabelSchema
 
-class MyTrainer(NNTrainer):
-    def _train_epoch(self) -> float: ...
-    def predict(self, loader): ...
-    def save(self, output_dir): ...
+# 1. Your concrete config - a few lines, once per project.
+@dataclass
+class MyConfig:
+    epochs: int = 10
+    early_stopping_patience: int = 3
+    monitor: Monitor = Monitor(metric=AccuracyMetric(), mode="max")
+    optimizer: OptimizerType = OptimizerType.ADAMW
+    learning_rate: float = 1e-3
+    weight_decay: float = 1e-2
 
-config = TrainerConfig(
-    epochs=10,
-    early_stopping_patience=3,
-    monitor=Monitor(metric=AccuracyMetric(), mode="max"),
-    optimizer="adamw",
-    learning_rate=1e-3,
-    weight_decay=1e-2,
-)
+# 2. Your trainer - only what's specific to your model.
+class MyTrainer(NNTrainer[MyConfig]):
+    def __init__(self, model, train_loader, val_loader, config, device, callbacks=None):
+        super().__init__(model, train_loader, val_loader, config, device, callbacks)
+        self.optimizer = OPTIMIZERS[config.optimizer](model.parameters(), lr=config.learning_rate)
+
+    def _train_epoch(self) -> float: ...       # your forward/backward
+    def predict(self, loader): ...               # your validation forward pass
+
+    def save(self, output_dir) -> ArtifactBundle:
+        return ArtifactBundle.write(
+            output_dir, flavor="my-model",
+            label_schema=LabelSchema(kind="categorical", classes=(0, 1)),
+            files={"weights": BundleFile("weights.pt", lambda p: torch.save(self.best.state, p))},
+        )
+
+# 3. Train, with MLflow logging + a progress bar + a training-curve plot for free.
+trainer = MyTrainer(model, train_loader, val_loader, MyConfig(), device,
+                     callbacks=build_callbacks())
+trainer.fit()
+bundle = trainer.save("artifacts/my-model")
+
+# 4. Serve - any process, same artifact format.
+class MyPredictor:
+    label_schema = LabelSchema(kind="categorical", classes=(0, 1))
+
+    @classmethod
+    def load(cls, bundle: ArtifactBundle, device="cpu") -> "MyPredictor": ...
+    def predict(self, inputs): ...
+
+predictor = MyPredictor.load(ArtifactBundle.read("artifacts/my-model"))
+predictor.predict([...])
 ```

@@ -1,12 +1,14 @@
-from reviews_semantics.config import Settings
+from importlib.metadata import version as _pkg_version
+
 from reviews_semantics.data import TextPreprocessor, clean_text
 from reviews_semantics.evaluation import StarEvaluation, evaluate_stars
-from reviews_semantics.inference import load_default_model, load_default_predictor
 from reviews_semantics.labels import STAR_SCHEMA
 from reviews_semantics.paradigms.bilstm import BiLSTMPredictor, ClassifierTrainer, SentimentLSTM
+from reviews_semantics.registry import load_default_model, load_default_predictor
+from reviews_semantics.serving_config import Settings
 from reviews_semantics.training_config import TrainingConfig
 
-__version__ = "0.1.0"
+__version__ = _pkg_version("reviews-semantics")
 
 __all__ = [
     "__version__",

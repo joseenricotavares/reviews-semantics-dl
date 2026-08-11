@@ -1,22 +1,16 @@
 # reviews-semantics-dl
 
-Predicts the 1-5 star rating a customer gave a Brazilian e-commerce order,
-from the free-text review comment alone (Portuguese). Built by migrating a
-research notebook (`notebooks/review-score-semantics.ipynb`) into a
-production service, for the "Do notebook para o DevOps" activity.
+Predicts the 1-5 star rating a customer gave a Brazilian e-commerce order
+from the free-text review comment alone (Portuguese), served through a
+FastAPI endpoint and an offline batch CLI backed by the same inference code.
 
-```
-"Produto ótimo, chegou antes do prazo, super recomendo!"  ->  5
-"Produto veio quebrado e o vendedor nunca respondeu"       ->  1
-```
-
-The served model is a from-scratch bidirectional LSTM ("the baseline") - the
-one paradigm from the notebook with a trained checkpoint committed to this
-repository. It is competitive with the notebook's fine-tuned Transformer
-models (macro F1 0.419 vs. 0.44-0.46) while being far cheaper to run - see
-`GET /v1/model/info` below for the live metrics, or
-`notebooks/review-score-semantics.ipynb` for the full comparison and how
-this baseline was trained.
+The served baseline (a from-scratch bidirectional LSTM) was chosen out of
+seven models compared across three paradigms for being competitive with
+fine-tuned Transformers on macro-F1 while being far cheaper to run. Training
+and serving were designed together from the start: [`dlkit`](src/dlkit/README.md)
+is a reusable PyTorch training toolkit plus a framework-agnostic
+artifact/serving contract, extracted along the way; `reviews_semantics`
+(`src/reviews_semantics/`) is the concrete application built on top of it.
 
 ## What's in this repository
 
@@ -28,10 +22,6 @@ this baseline was trained.
 | `models/bilstm-baseline/` | The committed, ready-to-serve model bundle |
 | `docker/`, `docker-compose.yml` | Container definitions for serving and (re)training |
 
-This project implements **two** of the three production cases the activity
-allows: an **online prediction API** and an **offline batch execution**
-task, both built on the exact same inference code (see "Architecture" below).
-
 ## Quickstart (Docker)
 
 Requires Docker and Docker Compose. From the repository root:
@@ -40,8 +30,7 @@ Requires Docker and Docker Compose. From the repository root:
 docker compose up --build serve
 ```
 
-This builds the lean serving image (no training dependencies - see
-"Architecture") and starts the API on `http://localhost:8000`.
+This builds the lean serving image and starts the API on `http://localhost:8000`.
 
 ```bash
 curl http://localhost:8000/healthz
@@ -54,8 +43,6 @@ curl -X POST http://localhost:8000/v1/predictions \
 ```
 
 Interactive API docs (Swagger UI): `http://localhost:8000/docs`.
-
-Stop it with `Ctrl+C`, or `docker compose down`.
 
 ## The online API
 
@@ -179,32 +166,28 @@ input file.
 ## Architecture
 
 ```
-                      ┌─────────────────────┐
+                      ┌──────────────────────┐
                       │  dlkit (generic)     │
                       │  - NNTrainer (epochs)│
-                      │  - ArtifactBundle     │
-                      │  - Predictor protocol │
-                      │  - Metric/Evaluator   │
+                      │  - ArtifactBundle    │
+                      │  - Predictor protocol│
+                      │  - Metric/Evaluator  │
                       └──────────┬───────────┘
-                                 │ depends on (never the reverse)
+                                 │ depends on
                       ┌──────────▼───────────┐
-                      │ reviews_semantics     │
-                      │  - SentimentLSTM       │
-                      │  - BiLSTMPredictor     │
-                      └───┬───────────────┬───┘
-                          │               │
-                 ┌────────▼───┐   ┌───────▼────────┐
-                 │ FastAPI app │   │ batch CLI       │
-                 │ (online)    │   │ (offline)       │
-                 └─────────────┘   └────────────────┘
-                 both call reviews_semantics.inference.load_default_predictor()
+                      │ reviews_semantics    │
+                      │  - SentimentLSTM     │
+                      │  - BiLSTMPredictor   │
+                      └───┬──────────────┬───┘
+                          │              │
+                 ┌────────▼────┐    ┌────▼────────┐
+                 │ FastAPI app │    │ batch CLI   │
+                 │ (online)    │    │ (offline)   │
+                 └─────────────┘    └─────────────┘
 ```
 
 The two packages are separately versioned and independently installable
-(each has its own `pyproject.toml`); `reviews_semantics` depends on `dlkit`,
-never the other way around. `dlkit` is intentionally reusable beyond this
-project - see [`src/dlkit/README.md`](src/dlkit/README.md) for what it is
-(and isn't) built for.
+(each has its own `pyproject.toml`); `reviews_semantics` depends on `dlkit`.
 
 **Training and serving share one artifact format.** `dlkit.artifacts.ArtifactBundle`
 is the single contract every trainer's `save()` writes and every predictor's
@@ -250,6 +233,23 @@ Run the batch CLI:
 ```bash
 MODEL_SOURCE=local MODEL_PATH=models/bilstm-baseline reviews-semantics predict-batch \
   --input data/test.csv --output scored.csv
+```
+
+## Using `dlkit` / `reviews_semantics` in another project
+
+Both packages install directly from this repository - no PyPI publish step
+required. Point `pip` at a Git URL with `#subdirectory=`:
+
+```bash
+pip install "git+https://github.com/joseenricotavares/reviews-semantics-dl.git@dlkit-v0.2.0#subdirectory=src/dlkit"
+pip install "git+https://github.com/joseenricotavares/reviews-semantics-dl.git@reviews-semantics-v0.2.0#subdirectory=src/reviews_semantics"
+```
+
+Same syntax works with extras (e.g. `"dlkit[mlflow] @ git+...#subdirectory=src/dlkit"`) and in a `requirements.txt`:
+
+```
+dlkit @ git+https://github.com/joseenricotavares/reviews-semantics-dl.git@dlkit-v0.2.0#subdirectory=src/dlkit
+reviews-semantics @ git+https://github.com/joseenricotavares/reviews-semantics-dl.git@reviews-semantics-v0.2.0#subdirectory=src/reviews_semantics
 ```
 
 ## Reproducing training

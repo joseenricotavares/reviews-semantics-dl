@@ -1,3 +1,5 @@
+from importlib.metadata import version as _pkg_version
+
 from dlkit.artifacts import (
     ArtifactBundle,
     BundleFile,
@@ -12,18 +14,20 @@ from dlkit.artifacts import (
 )
 from dlkit.evaluation import AccuracyMetric, EvaluationResult, Evaluator, F1Metric, Metric
 from dlkit.inference import Predictor, ProbabilisticPredictor
-from dlkit.optim import OPTIMIZERS, OptimizerType
 from dlkit.training import (
+    OPTIMIZERS,
     BestCheckpoint,
     EpochResult,
     Monitor,
     NNTrainer,
+    OptimizerType,
+    SimpleTrainerConfig,
     TrainerCallback,
     TrainerConfig,
     TrainingHistory,
 )
 
-__version__ = "0.1.0"
+__version__ = _pkg_version("dlkit")
 
 __all__ = [
     "__version__",
@@ -51,6 +55,7 @@ __all__ = [
     "NNTrainer",
     "TrainerCallback",
     "TrainerConfig",
+    "SimpleTrainerConfig",
     "Monitor",
     "TrainingHistory",
     "EpochResult",

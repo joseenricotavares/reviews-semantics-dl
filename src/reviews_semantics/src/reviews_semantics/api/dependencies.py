@@ -5,7 +5,7 @@ from dlkit.inference import Predictor
 from fastapi import Request
 
 
-def get_predictor(request: Request) -> Predictor:
+def get_predictor(request: Request) -> Predictor[str]:
     return request.app.state.predictor
 
 

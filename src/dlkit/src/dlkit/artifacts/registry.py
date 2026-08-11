@@ -3,17 +3,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from dlkit.artifacts.bundle import ArtifactBundle
 from dlkit.inference.predictor import Predictor
 
-PredictorFactory = Callable[[ArtifactBundle, str], Predictor]
+PredictorFactory = Callable[[ArtifactBundle, str], Predictor[Any]]
 
 
 @dataclass(frozen=True, slots=True)
 class LoadedModel:
-    predictor: Predictor
+    predictor: Predictor[Any]
     bundle: ArtifactBundle
 
 
@@ -86,5 +86,5 @@ class ModelRegistry:
             raise UnknownFlavorError(bundle.manifest.flavor, known=sorted(self.factories))
         return LoadedModel(predictor=factory(bundle, self.device), bundle=bundle)
 
-    def load(self) -> Predictor:
+    def load(self) -> Predictor[Any]:
         return self.load_with_bundle().predictor

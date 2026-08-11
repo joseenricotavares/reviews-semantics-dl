@@ -2,12 +2,54 @@ from __future__ import annotations
 
 import csv
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from dlkit.evaluation.reporting import build_training_curve_figure
 from dlkit.training.base import NNTrainer, TrainerCallback
+
+
+def build_training_curve_figure(
+    entries: Sequence[dict[str, float]],
+    metric: str,
+    *,
+    title: str = "Training History",
+):
+    """Returns a matplotlib `Figure` plotting train/val loss and `metric` per epoch.
+
+    `entries` is the raw list of per-epoch metric dicts (e.g.
+    `TrainingHistory.entries`), each expected to contain `train_loss`,
+    `val_loss`, and `metric`.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")  # headless: this module never renders interactively
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import MaxNLocator
+
+    epochs = list(range(1, len(entries) + 1))
+    train_loss = [e["train_loss"] for e in entries]
+    val_loss = [e["val_loss"] for e in entries]
+    metric_values = [e[metric] for e in entries]
+
+    width = min(max(8, len(entries) * 0.25), 20)
+    fig, ax_loss = plt.subplots(figsize=(width, 4))
+    ax_metric = ax_loss.twinx()
+
+    line_kwargs = {"linewidth": 2, "marker": "o", "markersize": 3}
+    ax_loss.plot(epochs, train_loss, label="Train Loss", color="tab:blue", **line_kwargs)
+    ax_loss.plot(epochs, val_loss, label="Validation Loss", color="tab:cyan", **line_kwargs)
+    ax_metric.plot(epochs, metric_values, label=metric, color="tab:orange", **line_kwargs)
+
+    ax_loss.set(title=title, xlabel="Epoch", ylabel="Loss")
+    ax_metric.set_ylabel(metric)
+    ax_loss.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax_loss.grid(True)
+
+    lines = ax_loss.get_lines() + ax_metric.get_lines()
+    ax_loss.legend(lines, [line.get_label() for line in lines], loc="best")
+    fig.tight_layout()
+    return fig
 
 
 class HistoryPlotCallback(TrainerCallback):

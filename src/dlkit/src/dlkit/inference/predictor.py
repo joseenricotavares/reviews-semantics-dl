@@ -7,24 +7,23 @@ from dlkit.artifacts.bundle import ArtifactBundle, LabelSchema
 
 
 @runtime_checkable
-class Predictor(Protocol):
+class Predictor[InputT](Protocol):
     """The inference interface every paradigm implements."""
 
     label_schema: LabelSchema
 
-    def predict(self, texts: Sequence[str]) -> list[int]:
+    def predict(self, inputs: Sequence[InputT]) -> list[int]:
         """Raw input in, predicted label out - including any cleaning/tokenization."""
         ...
 
     @classmethod
-    def load(cls, bundle: ArtifactBundle, device: str = "cpu") -> Predictor:
+    def load(cls, bundle: ArtifactBundle, device: str = "cpu") -> Predictor[InputT]:
         """Reconstructs a ready-to-use predictor from a bundle written by `NNTrainer.save()`."""
         ...
 
 
 @runtime_checkable
-class ProbabilisticPredictor(Predictor, Protocol):
+class ProbabilisticPredictor[InputT](Predictor[InputT], Protocol):
     """Optional extension for predictors that can also expose class probabilities."""
 
-    def predict_proba(self, texts: Sequence[str]) -> list[list[float]]:
-        ...
+    def predict_proba(self, inputs: Sequence[InputT]) -> list[list[float]]: ...

@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from dlkit.evaluation import AccuracyMetric, F1Metric
-from dlkit.optim import OptimizerType
-from dlkit.training import Monitor
+from dlkit.training import Monitor, OptimizerType
 
 from reviews_semantics.evaluation.ordinal_metrics import QuadraticWeightedKappaMetric
 
@@ -22,6 +21,21 @@ class TrainingConfig:
     grad_clip_norm: float | None = 5.0
     monitor: Monitor = field(default_factory=_default_monitor)
     early_stopping_patience: int = 5
+
+
+@dataclass
+class SearchSpaceConfig:
+    """Optuna hyperparameter-search space for the BiLSTM baseline."""
+
+    hidden_dim_options: tuple[int, ...]
+    dropout_range: tuple[float, float]
+    lr_range: tuple[float, float]
+    weight_decay_range: tuple[float, float]
+
+    epochs: int
+    optimizer: OptimizerType
+    monitor: Monitor
+    early_stopping_patience: int
 
 
 STAR_MONITORS: dict[str, Monitor] = {
