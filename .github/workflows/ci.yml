@@ -15,34 +15,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require a version bump for every package whose source changed
-        run: |
-          set -euo pipefail
-          BASE="${{ github.event.pull_request.base.sha }}"
-          FAILED=0
+      - uses: ./.github/actions/version-check
+        with:
+          package-name: dlkit
+          package-dir: src/dlkit
+          base-sha: ${{ github.event.pull_request.base.sha }}
 
-          check_package () {
-            local name="$1" dir="$2"
-            local changed
-            changed=$(git diff --name-only "$BASE"...HEAD -- "$dir/src" "$dir/pyproject.toml" | wc -l)
-            if [ "$changed" -eq 0 ]; then
-              echo "OK: $name - no source changes in this PR, no version bump required."
-              return
-            fi
-            local version_line_changed
-            version_line_changed=$(git diff "$BASE"...HEAD -- "$dir/pyproject.toml" | grep -c '^[+-]version = ' || true)
-            if [ "$version_line_changed" -eq 0 ]; then
-              echo "::error::$name changed under $dir/src (or $dir/pyproject.toml) but the 'version' field in $dir/pyproject.toml was not bumped. Bump it (patch/minor/major as appropriate) before merging."
-              FAILED=1
-            else
-              echo "OK: $name - source changed and version was bumped."
-            fi
-          }
-
-          check_package "dlkit" "src/dlkit"
-          check_package "reviews_semantics" "src/reviews_semantics"
-
-          exit $FAILED
+      - uses: ./.github/actions/version-check
+        with:
+          package-name: reviews_semantics
+          package-dir: src/reviews_semantics
+          base-sha: ${{ github.event.pull_request.base.sha }}
 
   test:
     runs-on: ubuntu-latest
@@ -108,27 +91,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Tag each package at its current version, if not already tagged
+      - name: Configure git identity
         run: |
-          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          tag_package () {
-            local dir="$1"
-            local name version tag
-            name=$(grep -m1 '^name = ' "$dir/pyproject.toml" | sed -E 's/name = "(.*)"/\1/')
-            version=$(grep -m1 '^version = ' "$dir/pyproject.toml" | sed -E 's/version = "(.*)"/\1/')
-            tag="${name}-v${version}"
+      - uses: ./.github/actions/tag-package
+        with:
+          package-dir: src/dlkit
 
-            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "OK: $tag already exists, skipping."
-            else
-              git tag -a "$tag" -m "$tag"
-              git push origin "$tag"
-              echo "Created and pushed tag $tag"
-            fi
-          }
-
-          tag_package "src/dlkit"
-          tag_package "src/reviews_semantics"
+      - uses: ./.github/actions/tag-package
+        with:
+          package-dir: src/reviews_semantics

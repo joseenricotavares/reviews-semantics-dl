@@ -1,4 +1,6 @@
 _ignore/
+.github/.secrets.env
+
 *__pycache__/
 .vscode/
 data/*
