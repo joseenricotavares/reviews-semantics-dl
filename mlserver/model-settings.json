@@ -1,0 +1,4 @@
+{
+  "name": "review-score-bilstm",
+  "implementation": "reviews_semantics.mlserver_runtime.ReviewScorePredictorRuntime"
+}

@@ -1,0 +1,41 @@
+stages:
+  - test
+  - build
+  - deploy
+
+test:
+  stage: test
+  image: python:3.12
+  script:
+    - pip install --upgrade pip
+    - pip install -e src/dlkit
+    - pip install -e "src/reviews_semantics[train]"
+    - pip install -r requirements-dev.txt
+    - ruff check src
+    - pytest -q
+
+mlserver-smoke-test:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -f docker/mlserver.Dockerfile -t reviews-semantics-mlserver:ci .
+    - docker run -d --name mlserver-smoke reviews-semantics-mlserver:ci
+    - sleep 10
+    - docker logs mlserver-smoke
+    - docker ps --filter "name=mlserver-smoke" --filter "status=running" | grep mlserver-smoke
+
+deploy:
+  stage: deploy
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker login -u "$DOCKERHUB_USER" -p "$DOCKERHUB_TOKEN"
+    - docker build -f docker/serve.Dockerfile -t "$DOCKERHUB_USER/reviews-semantics-serve:$CI_COMMIT_SHORT_SHA" .
+    - docker push "$DOCKERHUB_USER/reviews-semantics-serve:$CI_COMMIT_SHORT_SHA"
+    - docker tag "$DOCKERHUB_USER/reviews-semantics-serve:$CI_COMMIT_SHORT_SHA" "$DOCKERHUB_USER/reviews-semantics-serve:latest"
+    - docker push "$DOCKERHUB_USER/reviews-semantics-serve:latest"
+  only:
+    - main
