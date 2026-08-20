@@ -26,6 +26,17 @@ services:
     environment:
       MLFLOW_TRACKING_URI: sqlite:////app/mlflow/mlflow.db
 
+  # Not started by `docker compose up` - run explicitly with:
+  #   docker compose --profile mlserver up --build mlserver
+  mlserver:
+    build:
+      context: .
+      dockerfile: docker/mlserver.Dockerfile
+    profiles: ["mlserver"]
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+
   # Optional: browse experiment runs/artifacts logged by `train`.
   #   docker compose --profile mlflow up mlflow-ui
   mlflow-ui:
